@@ -60,10 +60,15 @@ public class HdfsService implements Service {
   private String bindIP = "127.0.0.1";
   private int namenodeRpcPort = 8020;
   private int namenodeHttpPort = 50070;
-  private int datanodePort = 50010;
+  private int datanodePort = 0;
   private int datanodeIpcPort = 50020;
   private int datanodeHttpPort = 50075;
   private boolean clean = false;
+
+  /**
+   * Embedded KDC service
+   */
+  private KdcService kdcService;
 
   /**
    * Embedded HDFS cluster
@@ -101,6 +106,7 @@ public class HdfsService implements Service {
           .parseInt(serviceConfig.get(DATANODE_HTTP_PORT));
     }
     hadoopConf = serviceConfig.getHadoopConf();
+    kdcService = serviceConfig.getKdcService();
   }
 
   @Override
@@ -115,6 +121,10 @@ public class HdfsService implements Service {
 
     if (hadoopConf == null) {
       hadoopConf = new Configuration();
+    }
+    if (kdcService != null) {
+      hadoopConf = configureSecureHdfs(hadoopConf, MiniCluster.ipToHost(bindIP),
+          kdcService);
     }
 
     // If clean, then remove the work dir so we can start fresh.
@@ -223,6 +233,58 @@ public class HdfsService implements Service {
     String user = System.getProperty("user.name");
     config.set("hadoop.proxyuser." + user + ".groups", "*");
     config.set("hadoop.proxyuser." + user + ".hosts", "*");
+    return config;
+  }
+
+  private static Configuration configureSecureHdfs(Configuration config,
+      String host, KdcService kdc) {
+    if (config == null) {
+      config = new Configuration();
+    }
+
+    config.set("hadoop.security.authentication", "kerberos");
+    config.set("hadoop.security.authorization", "true");
+    config.set("ignore.secure.ports.for.testing", "true");
+    /*config.set("hadoop.security.auth_to_local", "\n" +
+        "RULE:[1:$1](.*)s///\n" +
+        "RULE:[2:$1](.*)s///\n" +
+        "DEFAULT\n");*/
+
+    String hdfsUser = System.getProperty("user.name");
+
+    String keytab;
+    try {
+      keytab = kdc.createKeytab("hdfs.keytab", hdfsUser+"/"+host,
+          "HTTP/"+host);
+    } catch (Exception ex) {
+      throw new RuntimeException("Filed to create keytab: " + ex.getMessage(),
+          ex);
+    }
+
+    // NameNode settings
+    config.set("dfs.namenode.keytab.file", keytab);
+    config.set("dfs.namenode.kerberos.principal",
+        kdc.getPrincipal(hdfsUser+"/_HOST"));
+    config.set("dfs.namenode.kerberos.internal.spnego.principal",
+        kdc.getPrincipal("HTTP/_HOST"));
+
+    // SecondaryNameNode settings
+    config.set("dfs.secondary.namenode.keytab.file", keytab);
+    config.set("dfs.secondary.namenode.kerberos.principal",
+        kdc.getPrincipal(hdfsUser+"/_HOST"));
+    config.set("dfs.secondary.namenode.kerberos.internal.spnego.principal",
+        kdc.getPrincipal("HTTP/_HOST"));
+
+    // DataNode settings
+    config.set("dfs.datanode.keytab.file", keytab);
+    config.set("dfs.datanode.kerberos.principal",
+        kdc.getPrincipal(hdfsUser+"/_HOST"));
+
+    // WebHDFS settings
+    config.set("dfs.web.authentication.kerberos.keytab", keytab);
+    config.set("dfs.web.authentication.kerberos.principal",
+        kdc.getPrincipal("HTTP/_HOST"));
+
     return config;
   }
 

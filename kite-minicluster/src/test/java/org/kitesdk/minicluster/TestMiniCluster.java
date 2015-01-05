@@ -16,6 +16,7 @@
 package org.kitesdk.minicluster;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.UUID;
 
 import org.junit.Test;
@@ -56,6 +57,21 @@ public class TestMiniCluster {
         .addService(ZookeeperService.class)
         .addService(HBaseService.class)
         .addService(HiveService.class)
+        .clean(true).build();
+    miniCluster.start();
+    miniCluster.stop();
+  }
+
+  @Test
+  public void testSecureMiniCluster() throws IOException, InterruptedException {
+    String workDir = "target/kite-minicluster-workdir-" + UUID.randomUUID();
+    MiniCluster miniCluster = new MiniCluster.Builder().workDir(workDir)
+        .bindIP(InetAddress.getLocalHost().toString().split("/")[1])
+        .enableSecureMode()
+        .addService(HdfsService.class)
+        .addService(ZookeeperService.class)
+        .addService(HBaseService.class)
+        // .addService(HiveService.class) Hive security support not yet implemented
         .clean(true).build();
     miniCluster.start();
     miniCluster.stop();

@@ -73,6 +73,11 @@ public class HBaseService implements Service {
   private int regionserverPort = 60020;
 
   /**
+   * Embedded KDC service
+   */
+  private KdcService kdcService;
+
+  /**
    * Embedded HBase cluster
    */
   private MiniHBaseCluster hbaseCluster;
@@ -96,6 +101,7 @@ public class HBaseService implements Service {
       masterPort = Integer.parseInt(serviceConfig.get(REGIONSERVER_PORT_KEY));
     }
     hadoopConf = serviceConfig.getHadoopConf();
+    kdcService = serviceConfig.getKdcService();
   }
 
   @Override
@@ -109,6 +115,11 @@ public class HBaseService implements Service {
         "Hadoop Configuration must be set before starting mini HBase cluster");
     Preconditions.checkState(zookeeperClientPort != 0,
         "The zookeeper client port must be configured to a non zero value");
+
+    if (kdcService != null) {
+      hadoopConf = configureSecureHbase(hadoopConf, MiniCluster.ipToHost(bindIP),
+          kdcService);
+    }
 
     // We first start an empty HBase cluster before fully configuring it
     hbaseCluster = new MiniHBaseCluster(hadoopConf, 0, 0, null, null);
@@ -214,6 +225,38 @@ public class HBaseService implements Service {
     // regionserver info web interfaces
     config.set(HConstants.MASTER_INFO_PORT, "-1");
     config.set(HConstants.REGIONSERVER_INFO_PORT, "-1");
+    return config;
+  }
+
+  private static Configuration configureSecureHbase(Configuration config,
+      String host, KdcService kdc) {
+    if (config == null) {
+      config = new Configuration();
+    }
+
+    config.set("hbase.security.authentication", "kerberos");
+    config.set("hbase.security.authorization", "true");
+    config.set("hbase.coprocessor.region.classes",
+        "org.apache.hadoop.hbase.security.token.TokenProvider");
+
+    String keytab;
+    try {
+      keytab = kdc.createKeytab("hbase.keytab", "hbase/"+host);
+    } catch (Exception ex) {
+      throw new RuntimeException("Filed to create keytab: " + ex.getMessage(),
+          ex);
+    }
+
+    // Master settings
+    config.set("hbase.master.keytab.file", keytab);
+    config.set("hbase.master.kerberos.principal",
+        kdc.getPrincipal("hbase/_HOST"));
+
+    // RegionServer settings
+    config.set("hbase.regionserver.keytab.file", keytab);
+    config.set("hbase.regionserver.kerberos.principal",
+        kdc.getPrincipal("hbase/_HOST"));
+
     return config;
   }
 

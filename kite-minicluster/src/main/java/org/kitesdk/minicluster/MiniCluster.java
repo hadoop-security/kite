@@ -21,9 +21,11 @@ import com.google.common.collect.Lists;
 import com.google.common.io.Resources;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +79,11 @@ public class MiniCluster {
       throw new RuntimeException(e);
     }
     registeredServices.put(klass.getName(), service);
+  }
+
+  public static String ipToHost(String ip) throws UnknownHostException {
+    InetAddress address = InetAddress.getByName(ip);
+    return address.getHostName();
   }
 
   /**
@@ -150,6 +157,13 @@ public class MiniCluster {
 
     public Builder flumeAgentName(String name) {
       serviceConfig.set(FLUME_AGENT_NAME, name);
+      return this;
+    }
+
+    public Builder enableSecureMode() {
+      addService(KdcService.class);
+      KdcService kdcService = (KdcService) services.get(services.size()-1);
+      serviceConfig.setKdcService(kdcService);
       return this;
     }
 

@@ -88,6 +88,7 @@ public interface Service {
 
     private final Map<String, String> config = new HashMap<String, String>();
     private Configuration hadoopConf;
+    private KdcService kdcService;
 
     public void setHadoopConf(Configuration hadoopConf) {
       this.hadoopConf = hadoopConf;
@@ -95,6 +96,14 @@ public interface Service {
 
     public Configuration getHadoopConf() {
       return hadoopConf;
+    }
+
+    public void setKdcService(KdcService kdcService) {
+      this.kdcService = kdcService;
+    }
+
+    public KdcService getKdcService() {
+      return kdcService;
     }
 
     public void set(String name, String value) {
